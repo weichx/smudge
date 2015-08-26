@@ -265,19 +265,3 @@ export function smudgable(constructor : any) : any {
         return instance;
     };
 }
-
-@smudgable
-export class Test1 {
-
-    public property1 : number;
-    public stringProp : string;
-    public objProp : Object;
-    public arrayProp : Array<string>;
-
-    constructor() {
-        this.property1 = 100;
-        this.stringProp = "hello";
-        this.objProp = {};
-        this.arrayProp = [];
-    }
-}
