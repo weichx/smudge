@@ -248,6 +248,7 @@ export function smudge(prototype : any, property : string, instance? : any) : an
 export function smudgable(constructor : any) : any {
     var smudged : boolean = false;
 
+
     function SmudgeConstructor() : any {
         return constructor.apply(this, arguments);
     }
@@ -255,7 +256,13 @@ export function smudgable(constructor : any) : any {
     SmudgeConstructor.prototype = constructor.prototype;
 
     return function () : any {
-        var instance = new (<any>SmudgeConstructor)(arguments);
+        //todo play with this
+        //var Temp = function(){};
+        //Temp.prototype = constructor.prototype;
+        //var inst = new Temp();
+        //var retn = constructor.apply(inst, arguments);
+        //return Object(retn) === retn ? retn : inst;
+        var instance = new (<any>SmudgeConstructor)(arguments[0], arguments[1], arguments[2], arguments[3], arguments[4]);
         if (!smudged) {
             smudged = true;
             Object.keys(instance).forEach(function (property : string) {
