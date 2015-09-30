@@ -1,13 +1,12 @@
 {
   "name": "smudge",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "Dirty Checking",
   "main": "dist/smudge.js",
   "scripts": {
     "test": "gulp test"
   },
-  "keywords": [
-  ],
+  "keywords": [],
   "author": "Matt Weichselbaum",
   "license": "ISC",
   "devDependencies": {
