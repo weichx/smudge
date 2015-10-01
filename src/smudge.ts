@@ -211,7 +211,7 @@ class DirtyTracker {
 }
 
 export function smudge(prototype : any, property : string, instance? : any) : any {
-
+    debugger;
     if (instance) {
         var dirtyTracker = dirtyInstanceMap.get(instance);
         if (!dirtyTracker) {
@@ -226,15 +226,16 @@ export function smudge(prototype : any, property : string, instance? : any) : an
     }
 
     Object.defineProperty(prototype, property, {
-        enumerable : true,
-        get : function () {
+        enumerable: true,
+        get: function () {
             var dirtyTracker = dirtyInstanceMap.get(this);
             if (!dirtyTracker) {
                 dirtyTracker = new DirtyTracker();
+                dirtyInstanceMap.set(this, dirtyTracker);
             }
             return dirtyTracker.fieldValues[property];
         },
-        set : function (value : any) {
+        set: function (value : any) {
             var dirtyTracker = dirtyInstanceMap.get(this);
             if (!dirtyTracker) {
                 dirtyTracker = new DirtyTracker();
@@ -248,27 +249,24 @@ export function smudge(prototype : any, property : string, instance? : any) : an
 export function smudgable(constructor : any) : any {
     var smudged : boolean = false;
 
+    var Temp = function(){};
+    Temp.prototype = constructor.prototype;
 
-    function SmudgeConstructor() : any {
-        return constructor.apply(this, arguments);
-    }
-
-    SmudgeConstructor.prototype = constructor.prototype;
-
-    return function () : any {
-        //todo play with this
-        //var Temp = function(){};
-        //Temp.prototype = constructor.prototype;
-        //var inst = new Temp();
-        //var retn = constructor.apply(inst, arguments);
-        //return Object(retn) === retn ? retn : inst;
-        var instance = new (<any>SmudgeConstructor)(arguments[0], arguments[1], arguments[2], arguments[3], arguments[4]);
+    var wrappedConstructor = function () {
+        var instance = new (<any>Temp)();
+        var retn = constructor.apply(instance, arguments);
         if (!smudged) {
             smudged = true;
+            Object.keys(constructor).forEach(function (property : string) {
+                (<any>wrappedConstructor)[property] = (<any>constructor)[property];
+            });
+
             Object.keys(instance).forEach(function (property : string) {
                 smudge(instance.constructor.prototype, property, instance);
             });
         }
         return instance;
+
     };
+    return wrappedConstructor;
 }
