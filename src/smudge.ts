@@ -211,7 +211,6 @@ class DirtyTracker {
 }
 
 export function smudge(prototype : any, property : string, instance? : any) : any {
-    debugger;
     if (instance) {
         var dirtyTracker = dirtyInstanceMap.get(instance);
         if (!dirtyTracker) {
