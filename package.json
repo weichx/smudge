@@ -1,6 +1,6 @@
 {
   "name": "smudge",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "description": "Dirty Checking",
   "main": "dist/smudge.js",
   "scripts": {
