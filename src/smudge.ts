@@ -285,7 +285,7 @@ export function smudge(prototype : any, property : string, instance? : any) : an
         }
     });
 }
-
+declare var global : any;
 export function smudgable(baseClass? : Function) : any {
     return function (constructor : any) {
         var str = constructor.toString();
@@ -300,8 +300,16 @@ export function smudgable(baseClass? : Function) : any {
         var nameEnd = argStart - 1;
         var constructorName = str.slice(nameStart, nameEnd).trim();
 
-        (<any>window).__smudge = smudge;
-        var w : any = (<any>window);
+        var w : any;
+        var globalString = 'window';
+        try {
+            w = window;
+        }
+        catch(e) {
+            globalString = 'global';
+            w = global;
+        }
+        w.__smudge = smudge;
         w.__wasSmudged = w.__wasSmudged || {};
         w.__smudgedTypes = w.__smudgedTypes || new Map<any, any>();
         w.__smudgeValues = w.__smudgeValues || new Map<string, any>();
@@ -318,17 +326,17 @@ export function smudgable(baseClass? : Function) : any {
 
         var randomString = obj.randomString;
         var fn = eval(`(function ${constructorName} (${argStr}) {
-            ${body.trim().replace('_super', `window.__smudgeValues.get('${randomString}').baseClass`)}
-            if(!window.__wasSmudged['${randomString}']) {
-                var construct = window.__smudgeValues.get('${randomString}').construct;
+            ${body.trim().replace('_super', `${globalString}.__smudgeValues.get('${randomString}').baseClass`)}
+            if(!${globalString}.__wasSmudged['${randomString}']) {
+                var construct = ${globalString}.__smudgeValues.get('${randomString}').construct;
                 Object.keys(construct).forEach(function (property) {
                     this.constructor[property] = construct[property];
                 }, this);
 
                 Object.keys(this).forEach(function (property) {
-                    window.__smudge(this.constructor.prototype, property, this);
+                    ${globalString}.__smudge(this.constructor.prototype, property, this);
                 }, this);
-                window.__wasSmudged['${randomString}'] = true;
+                ${globalString}.__wasSmudged['${randomString}'] = true;
             }
         })`);
         if(w.__CerializeTypeMap && w.__CerializeTypeMap.has(constructor)) {
