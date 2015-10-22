@@ -14,6 +14,24 @@ interface WeakMapConstructor {
 
 declare var WeakMap : WeakMapConstructor;
 
+export interface Map<K, V> {
+    clear(): void;
+    delete(key : K): boolean;
+    forEach(callbackfn : (value : V, index : K, map : Map<K, V>) => void, thisArg? : any): void;
+    get(key : K): V;
+    has(key : K): boolean;
+    set(key : K, value? : V): Map<K, V>;
+    size: number;
+}
+
+export interface MapConstructor {
+    new (): Map<any, any>;
+    new <K, V>(): Map<K, V>;
+    prototype: Map<any, any>;
+}
+
+declare var Map : MapConstructor;
+
 var dirtyInstanceMap = new WeakMap<any, DirtyTracker>();
 var dirtyTrackedArrays = new WeakMap<Array<any>, Array<any>>();
 
@@ -210,20 +228,7 @@ class DirtyTracker {
     }
 }
 
-export function smudge(prototype : any, property : string, instance? : any) : any {
-    if (instance) {
-        var dirtyTracker = dirtyInstanceMap.get(instance);
-        if (!dirtyTracker) {
-            dirtyTracker = new DirtyTracker();
-            dirtyInstanceMap.set(instance, dirtyTracker);
-        }
-        if (Array.isArray(instance[property])) {
-            DirtyTrackArray(instance[property]);
-        }
-        dirtyTracker.setField(property, instance[property]);
-        delete instance[property];
-    }
-
+export function dirtychecked(prototype : any, property : string) : any {
     Object.defineProperty(prototype, property, {
         enumerable: true,
         get: function () {
@@ -245,27 +250,90 @@ export function smudge(prototype : any, property : string, instance? : any) : an
     });
 }
 
-export function smudgable(constructor : any) : any {
-    var smudged : boolean = false;
-
-    var Temp = function(){};
-    Temp.prototype = constructor.prototype;
-
-    var wrappedConstructor = function () {
-        var instance = new (<any>Temp)();
-        var retn = constructor.apply(instance, arguments);
-        if (!smudged) {
-            smudged = true;
-            Object.keys(constructor).forEach(function (property : string) {
-                (<any>wrappedConstructor)[property] = (<any>constructor)[property];
-            });
-
-            Object.keys(instance).forEach(function (property : string) {
-                smudge(instance.constructor.prototype, property, instance);
-            });
+export function smudge(prototype : any, property : string, instance? : any) : any {
+    if (instance) {
+        var dirtyTracker = dirtyInstanceMap.get(instance);
+        if (!dirtyTracker) {
+            dirtyTracker = new DirtyTracker();
+            dirtyInstanceMap.set(instance, dirtyTracker);
         }
-        return instance;
+        if (Array.isArray(instance[property])) {
+            DirtyTrackArray(instance[property]);
+        }
+        dirtyTracker.setField(property, instance[property]);
+        delete instance[property];
+    }
 
-    };
-    return wrappedConstructor;
+    Object.defineProperty(prototype, property, {
+        enumerable: true,
+        configurable: true,
+        get: function () {
+            var dirtyTracker = dirtyInstanceMap.get(this);
+            if (!dirtyTracker) {
+                dirtyTracker = new DirtyTracker();
+                dirtyInstanceMap.set(this, dirtyTracker);
+            }
+            return dirtyTracker.fieldValues[property];
+        },
+        set: function (value : any) {
+            var dirtyTracker = dirtyInstanceMap.get(this);
+            if (!dirtyTracker) {
+                dirtyTracker = new DirtyTracker();
+                dirtyInstanceMap.set(this, dirtyTracker);
+            }
+            dirtyTracker.setField(property, value);
+        }
+    });
+}
+
+export function smudgable(baseClass? : Function) : any {
+    return function (constructor : any) {
+        var str = constructor.toString();
+        var start = str.indexOf('{') + 1;
+        var end = str.lastIndexOf('}');
+        var body = str.slice(start, end);
+        var argSection = str.substr(0, start);
+        var argStart = argSection.indexOf('(') + 1;
+        var argEnd = argSection.lastIndexOf(')');
+        var argStr = str.slice(argStart, argEnd);
+        var nameStart = str.indexOf(' ') + 1;
+        var nameEnd = argStart - 1;
+        var constructorName = str.slice(nameStart, nameEnd).trim();
+
+        (<any>window).__smudge = smudge;
+        var w : any = (<any>window);
+        w.__wasSmudged = w.__wasSmudged || {};
+        w.__smudgedTypes = w.__smudgedTypes || new Map<any, any>();
+        w.__smudgeValues = w.__smudgeValues || new Map<string, any>();
+
+        var obj : any = w.__smudgedTypes.get(constructor);
+        if (!obj) {
+            obj = {};
+            obj.randomString = (Math.random() * Math.random()).toString();
+            obj.construct = constructor;
+            obj.baseClass = baseClass;
+            w.__smudgedTypes.set(constructor, obj);
+            w.__smudgeValues.set(obj.randomString, obj);
+        }
+
+        var randomString = obj.randomString;
+        var fn = eval(`(function ${constructorName} (${argStr}) {
+            ${body.trim().replace('_super', `window.__smudgeValues.get('${randomString}').baseClass`)}
+            if(!window.__wasSmudged['${randomString}']) {
+                var construct = window.__smudgeValues.get('${randomString}').construct;
+                Object.keys(construct).forEach(function (property) {
+                    this.constructor[property] = construct[property];
+                }, this);
+
+                Object.keys(this).forEach(function (property) {
+                    window.__smudge(this.constructor.prototype, property, this);
+                }, this);
+                window.__wasSmudged['${randomString}'] = true;
+            }
+        })`);
+        if(w.__CerializeTypeMap && w.__CerializeTypeMap.has(constructor)) {
+            w.__CerializeTypeMap.set(fn, w.__CerializeTypeMap.get(constructor));
+        }
+        return fn;
+    }
 }

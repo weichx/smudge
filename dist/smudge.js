@@ -185,6 +185,28 @@ var DirtyTracker = (function () {
     };
     return DirtyTracker;
 })();
+function dirtychecked(prototype, property) {
+    Object.defineProperty(prototype, property, {
+        enumerable: true,
+        get: function () {
+            var dirtyTracker = dirtyInstanceMap.get(this);
+            if (!dirtyTracker) {
+                dirtyTracker = new DirtyTracker();
+                dirtyInstanceMap.set(this, dirtyTracker);
+            }
+            return dirtyTracker.fieldValues[property];
+        },
+        set: function (value) {
+            var dirtyTracker = dirtyInstanceMap.get(this);
+            if (!dirtyTracker) {
+                dirtyTracker = new DirtyTracker();
+                dirtyInstanceMap.set(this, dirtyTracker);
+            }
+            dirtyTracker.setField(property, value);
+        }
+    });
+}
+exports.dirtychecked = dirtychecked;
 function smudge(prototype, property, instance) {
     if (instance) {
         var dirtyTracker = dirtyInstanceMap.get(instance);
@@ -200,10 +222,12 @@ function smudge(prototype, property, instance) {
     }
     Object.defineProperty(prototype, property, {
         enumerable: true,
+        configurable: true,
         get: function () {
             var dirtyTracker = dirtyInstanceMap.get(this);
             if (!dirtyTracker) {
                 dirtyTracker = new DirtyTracker();
+                dirtyInstanceMap.set(this, dirtyTracker);
             }
             return dirtyTracker.fieldValues[property];
         },
@@ -218,21 +242,39 @@ function smudge(prototype, property, instance) {
     });
 }
 exports.smudge = smudge;
-function smudgable(constructor) {
-    var smudged = false;
-    function SmudgeConstructor() {
-        return constructor.apply(this, arguments);
-    }
-    SmudgeConstructor.prototype = constructor.prototype;
-    return function () {
-        var instance = new SmudgeConstructor(arguments);
-        if (!smudged) {
-            smudged = true;
-            Object.keys(instance).forEach(function (property) {
-                smudge(instance.constructor.prototype, property, instance);
-            });
+function smudgable(baseClass) {
+    return function (constructor) {
+        var str = constructor.toString();
+        var start = str.indexOf('{') + 1;
+        var end = str.lastIndexOf('}');
+        var body = str.slice(start, end);
+        var argSection = str.substr(0, start);
+        var argStart = argSection.indexOf('(') + 1;
+        var argEnd = argSection.lastIndexOf(')');
+        var argStr = str.slice(argStart, argEnd);
+        var nameStart = str.indexOf(' ') + 1;
+        var nameEnd = argStart - 1;
+        var constructorName = str.slice(nameStart, nameEnd).trim();
+        window.__smudge = smudge;
+        var w = window;
+        w.__wasSmudged = w.__wasSmudged || {};
+        w.__smudgedTypes = w.__smudgedTypes || new Map();
+        w.__smudgeValues = w.__smudgeValues || new Map();
+        var obj = w.__smudgedTypes.get(constructor);
+        if (!obj) {
+            obj = {};
+            obj.randomString = (Math.random() * Math.random()).toString();
+            obj.construct = constructor;
+            obj.baseClass = baseClass;
+            w.__smudgedTypes.set(constructor, obj);
+            w.__smudgeValues.set(obj.randomString, obj);
         }
-        return instance;
+        var randomString = obj.randomString;
+        var fn = eval("(function " + constructorName + " (" + argStr + ") {\n            " + body.trim().replace('_super', "window.__smudgeValues.get('" + randomString + "').baseClass") + "\n            if(!window.__wasSmudged['" + randomString + "']) {\n                var construct = window.__smudgeValues.get('" + randomString + "').construct;\n                Object.keys(construct).forEach(function (property) {\n                    this.constructor[property] = construct[property];\n                }, this);\n\n                Object.keys(this).forEach(function (property) {\n                    window.__smudge(this.constructor.prototype, property, this);\n                }, this);\n                window.__wasSmudged['" + randomString + "'] = true;\n            }\n        })");
+        if (w.__CerializeTypeMap && w.__CerializeTypeMap.has(constructor)) {
+            w.__CerializeTypeMap.set(fn, w.__CerializeTypeMap.get(constructor));
+        }
+        return fn;
     };
 }
 exports.smudgable = smudgable;

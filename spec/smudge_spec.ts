@@ -2,6 +2,7 @@
 
 import {
     smudgable,
+    dirtychecked,
     isSmudged,
     isDirty,
     unSmudge,
@@ -10,13 +11,14 @@ import {
     getSmudgedFields
 } from '../src/smudge';
 
-@smudgable
+//todo after recent changes replace use of window with global if env is node
+@smudgable()
 export class Test1 {
 
-    public property1 : number;
-    public stringProp : string;
-    public objProp : Object;
-    public arrayProp : Array<string>;
+     public property1 : number;
+     public stringProp : string;
+     public objProp : Object;
+     public arrayProp : Array<string>;
 
     constructor() {
         this.property1 = 100;
@@ -26,7 +28,7 @@ export class Test1 {
     }
 }
 
-@smudgable
+@smudgable()
 class Test2 {
     public stringProp : string;
     public list : Array<Test2>;
